@@ -44,26 +44,6 @@ vector<vector<VEHICLE> > lane;
 vector<VEHICLE> myVector;
 //vector<VEHICLE>  myVector;
         
-
-int getIndex(vector<vector<VEHICLE> > lane,int k){
-    unsigned int rows = lane.size();
-    for(unsigned int i=0;i<=rows-k;i++){
-        bool temp = true;
-        for(unsigned int j=i;j<i+k;j++){
-           if(lane[j].size() != 0) {
-              VEHICLE v = (lane[j][(lane[j].size()-1)]);
-              int x = v.x_pos - v.length;
-              if(x<=0){
-                 temp = false;
-                 i = i+(v.width-1);
-                 j = i+k;
-              } 
-           }
-        }
-        if(temp == true){ return ((int) i);}
-    } 
-    return (-1);
-}
 vector<int> getIndexVector(vector<vector<VEHICLE> > lane,int k){
     vector<int> Index;
     unsigned int rows = lane.size();
@@ -139,19 +119,24 @@ int findPositionInLanes(int* arr,int i,int width,int value){
     }
     return value;
 }
-int overTakeNthLane(int* distSoFar,int max,int dist,int n,vector<VEHICLE> myVector,int index,int roadWidth){
+int overTakeNthLane(int* distSoFar,int max/*,int dist*/,int n,vector<VEHICLE> myVector,int index,int roadWidth){
     VEHICLE v = myVector[index];
     int w = v.width;
     bool flag = true;
     if(n >= 0 && n < roadWidth){
-        for(int j=index+1;j<myVector.size();j++){
-            if(myVector[j].y_pos == n){
-                if(myVector[j].x_pos > v.x_pos-v.length) flag = false;  //Check >=
+        for(int j=0;j<myVector.size();j++){
+        	int jXpos = myVector[j].x_pos, jLth = myVector[j].length, xpos = v.x_pos, lth = v.length;
+        	bool b1 = (xpos<=jXpos && xpos >jXpos - jLth)||(xpos-lth < jXpos && xpos-lth >= jXpos - jLth);
+			bool b2 = (xpos <= jXpos && xpos-lth >= jXpos - jLth)&&(xpos >= jXpos && xpos-lth <= jXpos - jLth);
+            if(myVector[j].y_pos == n||myVector[j].y_pos+myVector[j].width<=n){
+               // if(myVector[j].x_pos > v.x_pos-v.length) flag = false;  //Check >=
+               if(b1 || b2 && index != j) flag = false;
             }
         }
         int d0 = findPositionInLanes(distSoFar,n,w,max);
-        
-        if(flag == true && d0 > dist){
+       // cout << flag <<"\n";
+		if(flag == true){
+			cout << v.type <<" "<< n<<" "<<"d0 :" << d0 <<"\n";
             return d0;
         }
         return (-1);
@@ -240,6 +225,7 @@ void update(int value){
         //Updating the position of each Vehicle one by one with the farthest first
         for(unsigned int i=0;i<myVector.size();i++){
             VEHICLE v=myVector[i];
+        	int xoriginal = v.x_pos; 
             if(v.x_pos+v.maxSpeed-v.length >= roadLength){
                 int laneNum = v.y_pos;int num = v.Id;
                 for(unsigned int k=0;k<lane[laneNum].size();k++){
@@ -254,12 +240,14 @@ void update(int value){
                 if(v.speed+v.maxAcc>=v.maxSpeed||infAcc == true) temp1 = v.x_pos+v.maxSpeed;
                 else temp1 = v.x_pos+(v.speed+(v.maxAcc)/2);
                 int max = temp1;
+                cout << "oldpos :" << v.x_pos<<"\n";
                 //Finding the max x position that a vehicle v can move.The x position is in temp1
                 int newYPOS = v.y_pos;int newIndex;int presentIndex;
                 for(unsigned int j=v.y_pos;j<v.y_pos+w;j++){
                     if(distSoFar[j] < temp1) temp1 = distSoFar[j];
                 }
-                if(v.y_pos+1 < roadWidth){
+                cout << "temp1 :"<< temp1 << "\n";
+/*                if(v.y_pos+1 < roadWidth){
                     int d = overTakeNthLane(distSoFar,max,temp1,v.y_pos+1,myVector,i,roadWidth);   //int overTakeNthLane(int* distSoFar,int dist,int n,vector<VEHICLE> myVector,int index,int roadWidth)
                     if(d != (-1) && d > temp1){
                         temp1 = d;
@@ -276,10 +264,52 @@ void update(int value){
                         newIndex = findNewIndex(lane[v.y_pos-1],v.x_pos);
                         presentIndex = findPresentIndex(lane[v.y_pos],v.Id);
                     }
+                }*/
+
+                int laneLf = laneNum-1, laneRt = laneNum+1;
+                int dmax= temp1, laneMax = laneNum;
+                //finding extreme left lane it can shift to 
+                for(; laneLf >= 0; laneLf--)
+                {
+                	int d = overTakeNthLane(distSoFar,max,laneLf,myVector,i,roadWidth);
+                	if(d == -1) break;
+                	if(d > dmax)
+                	{
+                		dmax = d;
+                		laneMax = laneLf;
+                	}	
+
                 }
+                for(; laneRt + v.width <= roadWidth; laneRt++)
+                {
+                	int d = overTakeNthLane(distSoFar,max,laneRt,myVector,i,roadWidth);
+                	if(d == -1) break;
+                	if(d > dmax)
+                	{
+                		dmax = d;
+                		laneMax =  laneRt;
+                	}		
+                }
+
+                
+                if(laneMax != laneNum)
+                {
+                	int laneNew;
+                	if(laneMax > laneNum) laneNew = laneNum + 1;
+                	else laneNew = laneNum - 1; //laneMax < laneNum
+                	temp1 = overTakeNthLane(distSoFar,max,laneNew,myVector,i,roadWidth);
+	                newYPOS = laneNew;
+    	            newIndex = findNewIndex(lane[laneNew],v.x_pos);
+        	        presentIndex = findPresentIndex(lane[v.y_pos],v.Id);                
+                }
+                
+                
                 //Updating the x position such thst it does not cross the signal when signal is red.
-                if(red ==true && (temp1>=roadSignal-1 && v.x_pos<roadSignal-1)) temp = roadSignal-2;   //Should I have <= or <
+                if(red ==true && (temp1>=roadSignal-1 && v.x_pos<roadSignal-1)){temp = roadSignal-2;
+                cout << "1";
+                }    //Should I have <= or <
                 else temp = temp1;
+                cout << "temp" << temp << "\n" ;
                 //Updating the length of the road covered till now among different lanes
                 if(newYPOS == v.y_pos || overtake == false){
                    for(unsigned int j=v.y_pos;j<v.y_pos+w;j++){
@@ -297,6 +327,7 @@ void update(int value){
                     lane[newYPOS].insert(lane[newYPOS].begin()+newIndex,v);
                 }
                 
+                if(v.x_pos < xoriginal) cout << "v.x_pos"<<v.x_pos << "  " << "xoriginal"<< xoriginal <<" " << lane[1][0].type <<"\n";
                 //Finding the vehicle on the road with VehicleId = num and updating its x position
             }
         }
@@ -379,7 +410,7 @@ void update(int value){
         if(word == "END" && clear == true) return;
         
         glutPostRedisplay(); // Inform GLUT that the display has changed
-        glutTimerFunc(200,update,0);//Call update after each 25 millisecond
+        glutTimerFunc(50,update,0);//Call update after each 25 millisecond
 }
 
 void drawScene() {
@@ -455,10 +486,10 @@ for(int i=0; i < myVector.size(); i++)
 		float x =(float) myVector[i].x_pos - roadLength/2, y = (float)myVector[i].y_pos - roadWidth/2, w = (float) myVector[i].width, lt = myVector[i].length;
         glBegin(GL_POLYGON);
         glColor3f(color_RGB(color)[0], color_RGB(color)[1], color_RGB(color)[2]);
-        glVertex3f(x/fact1 - 0.005, -y/fact2-0.005,0);
-        glVertex3f((x-lt)/fact1,-y/fact2-0.005,0);
+        glVertex3f(x/fact1 - 0.010, -y/fact2-0.010,0);
+        glVertex3f((x-lt)/fact1,-y/fact2-0.010,0);
         glVertex3f((x-lt)/fact1, -(y+w)/fact2,0);
-        glVertex3f(x/fact1 -0.005, -(y+w)/fact2,0);
+        glVertex3f(x/fact1 -0.010, -(y+w)/fact2,0);
         glEnd();
 }
 glFlush();
@@ -467,9 +498,10 @@ glutSwapBuffers(); //Send the 3D scene to the screen
 
 
 int main(int argc, char** argv){
-	cout << "Input configuration file name:\n";
-    cin >> filename;
-    inFile.open(filename.c_str());
+	//cout << "Input configuration file name:\n";
+    //cin >> filename;
+    //inFile.open(filename.c_str());
+    inFile.open("conf1.ini");
     while(inFile >> word){
         if(word == "GenerateAtBestLane"){
             gen = 1;        //gen = 1 makes the vehicle generates the vehicle in the best possible
